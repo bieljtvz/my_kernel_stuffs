@@ -2,7 +2,7 @@
 
 using namespace std;
 
-SC_HANDLE handle_kasperskyhook_svc = nullptr;
+SC_HANDLE handle_our_driver = nullptr;
 SC_HANDLE handle_scm = nullptr;
 
 // Opens a handle to SCM
@@ -98,33 +98,33 @@ bool load_driver()
     char buf[MAX_PATH]{ };
     GetCurrentDirectoryA(sizeof(buf), buf);
 
-    // Build KasperskyHook.sys path
+    // Build our_driver.sys path
     //
     const auto path = std::string(buf) + "\\first_driver.sys";
 
-    // Create KasperskyHook service
+    // Create our_driver service
     //
-    handle_kasperskyhook_svc = create_service("first_driver", "first_driver", path);
+    handle_our_driver = create_service("first_driver", "first_driver", path);
 
-    // Load KasperskyHook.sys
+    // Load our_driver.sys
     //
-    return handle_kasperskyhook_svc ? start_service(handle_kasperskyhook_svc) : false;
+    return handle_our_driver ? start_service(handle_our_driver) : false;
 }
 
 bool unload_driver()
 {
     SERVICE_STATUS svc_status{ };
 
-    // Unload KasperskyHook.sys
+    // Unload our_driver.sys
     //
-    bool success = stop_service(handle_kasperskyhook_svc, &svc_status);
+    bool success = stop_service(handle_our_driver, &svc_status);
 
     // Service not started
     //
     if (!success && GetLastError() == ERROR_SERVICE_NOT_ACTIVE)
         success = true;
 
-    // Delete KasperskyHook service
+    // Delete our_driver service
     //
-    return success ? delete_service(handle_kasperskyhook_svc) : false;
+    return success ? delete_service(handle_our_driver) : false;
 }

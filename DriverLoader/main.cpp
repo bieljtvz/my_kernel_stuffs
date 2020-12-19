@@ -25,7 +25,7 @@ int main()
 
         printf("[-] Failed to loader a driver\n");
 
-        // Do cleanup for KasperskyHook
+        // Do cleanup for our driver
         //
         unload_driver();     
 
