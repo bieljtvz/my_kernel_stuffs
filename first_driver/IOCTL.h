@@ -1,4 +1,11 @@
 #pragma once
+// Request to read virtual user memory (memory of a program) from kernel space
+#define IO_READ_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0701, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+
+// Request to write virtual user memory (memory of a program) from kernel space
+#define IO_WRITE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0702, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+
+#define IO_GETMODULE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0703, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
 
 PDEVICE_OBJECT pDeviceObject; // our driver object
 UNICODE_STRING dev, dos; // Driver registry paths
@@ -44,10 +51,11 @@ NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 		PKERNEL_READ_REQUEST ReadInput = (PKERNEL_READ_REQUEST)Irp->AssociatedIrp.SystemBuffer;
 		PKERNEL_READ_REQUEST ReadOutput = (PKERNEL_READ_REQUEST)Irp->AssociatedIrp.SystemBuffer;
 		
+
 		//
 		//Call our function 
 		tools::KeReadVirtualMemory((HANDLE)ReadInput->ProcessId, (PVOID)ReadInput->Address, &ReadInput->Response, ReadInput->Size);		
-
+		
 		DbgPrintEx(0, 0, "Read Params:  %lu, %#010x \n", ReadInput->ProcessId, ReadInput->Address);
 		DbgPrintEx(0, 0, "Value: %lu \n", ReadOutput->Response);
 
@@ -59,13 +67,37 @@ NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 		// Get the input buffer & format it to our struct
 		PKERNEL_WRITE_REQUEST WriteInput = (PKERNEL_WRITE_REQUEST)Irp->AssociatedIrp.SystemBuffer;
 
-		tools::KeReadVirtualMemory((HANDLE)WriteInput->ProcessId, &WriteInput->Value, (PVOID)WriteInput->Address, WriteInput->Size);
-
-		DbgPrintEx(0, 0, "Write Params:  %lu, %#010x \n", WriteInput->Value, WriteInput->Address);
+		tools::KeWriteVirtualMemory((HANDLE)WriteInput->ProcessId, &WriteInput->Value, (PVOID)WriteInput->Address, WriteInput->Size);
 
 		Status = STATUS_SUCCESS;
 		BytesIO = sizeof(KERNEL_WRITE_REQUEST);
 	}	
+	else if (ControlCode == IO_GETMODULE_REQUEST)
+	{
+		PKERNEL_GETMODULEBASE_REQUEST GetModuleBaseInput = (PKERNEL_GETMODULEBASE_REQUEST)Irp->AssociatedIrp.SystemBuffer;	
+
+		PEPROCESS hProcess;	
+		BOOLEAN iswow;
+
+		tools::FindProcess((HANDLE)GetModuleBaseInput->ProcessId, &hProcess, &iswow);
+
+		KAPC_STATE ApcState = { 0 };
+		KeStackAttachProcess(hProcess, &ApcState);
+
+		UNICODE_STRING CurrentName = { 0 };
+		
+		UNICODE_STRING module_name_unicode;
+		RtlInitUnicodeString(&module_name_unicode, GetModuleBaseInput->name);
+
+		PVOID GetModuleBase = tools::UtlGetModuleBase(hProcess, &module_name_unicode, iswow);
+		log("%ws: %p", GetModuleBaseInput->name, GetModuleBase);
+		
+		KeUnstackDetachProcess(&ApcState);
+		ObDereferenceObject(hProcess);
+
+		Status = STATUS_SUCCESS;
+		BytesIO = sizeof(PKERNEL_GETMODULEBASE_REQUEST);
+	}
 	else
 	{
 		// if the code is unknown
