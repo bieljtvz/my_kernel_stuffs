@@ -12,19 +12,18 @@ void init_control()
 		return;
 	}
 
-	printf("[+] 1 for read memory\n");
-	printf("[+] 2 for write memory\n");
-	printf("[+] 3 for dump memory\n");
-	
 	static int global_var = NULL;
-	//scanf()
+	
 	while (!(GetAsyncKeyState(VK_END) & 1))
 	{
 
 		if (GetAsyncKeyState(VK_F9) & 1)
 		{
-			DWORD find_addr = ReadVirtualMemory<DWORD>(0x32F8,0x005A1040, 4);
-			printf("[+] Address: %X\n",find_addr);			
+			/*DWORD find_addr = ReadVirtualMemory<DWORD>((DWORD)PID,0x005A1040, 4);
+			printf("[+] Address: %p\n",find_addr);			*/
+
+			ModuleBase(0x2AE4,"ucrtbase.dll");
+
 		}
 
 		Sleep(1);
