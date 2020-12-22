@@ -162,7 +162,7 @@ NTSTATUS tools::FindProcess(_In_ HANDLE ProcessId, _Out_ PEPROCESS* Process, _Ou
 	return (PVOID)((PUCHAR)Module + Rva);
 }
 
- PVOID tools::UtlpGetModuleBaseWow64(_In_ PEPROCESS Process,	_In_ PUNICODE_STRING ModuleName)
+ PVOID tools::UtlpGetModuleBaseWow64(_In_ PEPROCESS Process,	_In_ PUNICODE_STRING ModuleName, PDWORD Size)
 {
 	
 	PPEB32 Peb = (PPEB32)PsGetProcessWow64Process(Process);
@@ -188,7 +188,7 @@ NTSTATUS tools::FindProcess(_In_ HANDLE ProcessId, _Out_ PEPROCESS* Process, _Ou
 
 		if (RtlEqualUnicodeString(ModuleName, &CurrentName, TRUE))
 		{
-			
+			*Size = (DWORD)LdrEntry->SizeOfImage;
 			return (PVOID)LdrEntry->DllBase;			
 		}
 	}
@@ -197,7 +197,7 @@ NTSTATUS tools::FindProcess(_In_ HANDLE ProcessId, _Out_ PEPROCESS* Process, _Ou
 	return NULL;
 }
 
- PVOID tools::UtlpGetModuleBaseNative(_In_ PEPROCESS Process, _In_ PUNICODE_STRING ModuleName)
+ PVOID tools::UtlpGetModuleBaseNative(_In_ PEPROCESS Process, _In_ PUNICODE_STRING ModuleName, PDWORD Size)
 {
 	
 	PPEB Peb = PsGetProcessPeb(Process);
@@ -218,7 +218,7 @@ NTSTATUS tools::FindProcess(_In_ HANDLE ProcessId, _Out_ PEPROCESS* Process, _Ou
 
 		if (RtlEqualUnicodeString(ModuleName, &LdrEntry->BaseDllName, TRUE))
 		{
-			
+			*Size = (DWORD)LdrEntry->SizeOfImage;
 			return (PVOID)LdrEntry->DllBase;
 			
 		}
@@ -312,18 +312,18 @@ PVOID UtlGetModuleExport(_In_ PVOID Module,	_In_ PCHAR ExportName)
 	}
 }
 
-PVOID tools::UtlGetModuleBase(_In_ PEPROCESS Process,	_In_ PUNICODE_STRING ModuleName,	_In_ BOOLEAN IsWow64)
+PVOID tools::UtlGetModuleBase(_In_ PEPROCESS Process,	_In_ PUNICODE_STRING ModuleName,	_In_ BOOLEAN IsWow64, PDWORD Size)
 {
 	
 	__try
 	{
 		if (IsWow64)
 		{
-			return tools::UtlpGetModuleBaseWow64(Process, ModuleName);
+			return tools::UtlpGetModuleBaseWow64(Process, ModuleName, Size);
 		}
 		else
 		{		
-			return tools::UtlpGetModuleBaseNative(Process, ModuleName);
+			return tools::UtlpGetModuleBaseNative(Process, ModuleName, Size);
 		}
 
 		

@@ -75,9 +75,11 @@ NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 	else if (ControlCode == IO_GETMODULE_REQUEST)
 	{
 		PKERNEL_GETMODULEBASE_REQUEST GetModuleBaseInput = (PKERNEL_GETMODULEBASE_REQUEST)Irp->AssociatedIrp.SystemBuffer;	
+		PKERNEL_GETMODULEBASE_REQUEST GetModuleBaseOutput = (PKERNEL_GETMODULEBASE_REQUEST)Irp->AssociatedIrp.SystemBuffer;
 
 		PEPROCESS hProcess;	
 		BOOLEAN iswow;
+		DWORD SizeOfImage;
 
 		tools::FindProcess((HANDLE)GetModuleBaseInput->ProcessId, &hProcess, &iswow);
 
@@ -89,8 +91,15 @@ NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 		UNICODE_STRING module_name_unicode;
 		RtlInitUnicodeString(&module_name_unicode, GetModuleBaseInput->name);
 
-		PVOID GetModuleBase = tools::UtlGetModuleBase(hProcess, &module_name_unicode, iswow);
-		log("%ws: %p", GetModuleBaseInput->name, GetModuleBase);
+		PVOID GetModuleBase = tools::UtlGetModuleBase(hProcess, &module_name_unicode, iswow, &SizeOfImage);
+
+		log("Image: %p", GetModuleBase);
+		log("SizeOfImage: %X", SizeOfImage);
+
+		GetModuleBaseInput->BaseAddress = (DWORD_PTR)GetModuleBase;
+		GetModuleBaseInput->Size = SizeOfImage;
+
+		log("Image: %p", GetModuleBaseOutput->BaseAddress);
 		
 		KeUnstackDetachProcess(&ApcState);
 		ObDereferenceObject(hProcess);
