@@ -22,7 +22,7 @@ void init_control()
 			/*DWORD find_addr = ReadVirtualMemory<DWORD>((DWORD)PID,0x005A1040, 4);
 			printf("[+] Address: %p\n",find_addr);			*/
 
-			ModuleBase(0x2AE4,"ucrtbase.dll");
+			ModuleBase(0x3770,"ucrtbase.dll");
 
 		}
 

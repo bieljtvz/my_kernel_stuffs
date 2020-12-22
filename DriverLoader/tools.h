@@ -9,6 +9,7 @@ HANDLE hDriver; // Handle to driver
 
 #define IO_GETMODULEBASE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0703 /* Our Custom Code */, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
 
+//Init Structs//
 typedef struct _KERNEL_READ_REQUEST
 {
 	ULONG ProcessId;
@@ -31,11 +32,15 @@ typedef struct _KERNEL_GETMODULEBASE_REQUEST
 {
 	ULONG ProcessId;
 	WCHAR name[260];
-	bool isWow64;
 	DWORD_PTR BaseAddress;
-
+	DWORD Size;
 } KERNEL_GETMODULEBASE_REQUEST, * PKERNEL_GETMODULEBASE_REQUEST;
 
+//End of structs//
+
+
+//
+// Some Functions
 template <typename type>
 type ReadVirtualMemory(ULONG ProcessId, DWORD_PTR ReadAddress, SIZE_T Size)
 {
@@ -79,21 +84,19 @@ bool ModuleBase(ULONG ProcessId, const std::string& module_name)
 	if (hDriver == INVALID_HANDLE_VALUE)
 		return 0;
 
-	DWORD Bytes;
+	DWORD_PTR Return, Bytes;
 
 	KERNEL_GETMODULEBASE_REQUEST  GetModuleBaseRequest;
-	GetModuleBaseRequest.ProcessId = ProcessId;
-	GetModuleBaseRequest.isWow64 = 1;
-	
+	GetModuleBaseRequest.ProcessId = ProcessId;	
+
 	std::wstring wstr{ std::wstring(module_name.begin(), module_name.end()) };
 	memset(GetModuleBaseRequest.name, 0, sizeof(WCHAR) * 260);
-	wcscpy(GetModuleBaseRequest.name, wstr.c_str());
-	
-	GetModuleBaseRequest.BaseAddress = NULL;
-	
+	wcscpy(GetModuleBaseRequest.name, wstr.c_str());		
 
-	if (DeviceIoControl(hDriver, IO_GETMODULEBASE_REQUEST, &GetModuleBaseRequest, sizeof(GetModuleBaseRequest), 0, 0, &Bytes, NULL))
+	if (DeviceIoControl(hDriver, IO_GETMODULEBASE_REQUEST, &GetModuleBaseRequest, sizeof(GetModuleBaseRequest), &GetModuleBaseRequest, sizeof(GetModuleBaseRequest), 0, 0))
 	{
+		printf("[+] BaseAddress: %p\n", GetModuleBaseRequest.BaseAddress);
+		printf("[+] SizeOfImage: %p\n", GetModuleBaseRequest.Size);
 		return true;
 	}
 	else
