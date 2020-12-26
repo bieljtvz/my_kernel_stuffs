@@ -5,10 +5,12 @@ typedef struct _KERNEL_READ_REQUEST
 {
 	ULONG ProcessId;
 	DWORD_PTR  Address;
-	DWORD_PTR  Response;
-	ULONG Size;
+	BYTE* Response;
+	SIZE_T  Size;
 
 } KERNEL_READ_REQUEST, * PKERNEL_READ_REQUEST;
+
+
 
 typedef struct _KERNEL_WRITE_REQUEST
 {

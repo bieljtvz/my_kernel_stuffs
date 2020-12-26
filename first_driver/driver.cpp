@@ -6,6 +6,7 @@ DRIVER_UNLOAD DriverUnload;
 EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
 	UNREFERENCED_PARAMETER(RegistryPath);
+	UNREFERENCED_PARAMETER(DriverObject);
 	
 	RtlInitUnicodeString(&dev, L"\\Device\\first_driver");
 	RtlInitUnicodeString(&dos, L"\\DosDevices\\first_driver");
@@ -26,7 +27,6 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Regis
 	pDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
 	log("Driver iniciado com sucesso");
-
 
 	
 
