@@ -1,6 +1,18 @@
 #pragma once
 
 
+struct Vec3
+{
+	float X, Y, Z;
+};
+
+struct WorldToScreenMatrix_t
+{
+	float flMatrix[16];
+	float operator[](int i) const { return flMatrix[i]; }
+	float& operator[](int i) { return flMatrix[i]; }
+}WorldToScreenMatrix;
+
 void init_control()
 {
 	//
@@ -17,13 +29,14 @@ void init_control()
 	while (!(GetAsyncKeyState(VK_END) & 1))
 	{
 
-		if (GetAsyncKeyState(VK_F9) & 1)
+		//while(1)
+		//if (GetAsyncKeyState(VK_F9) & 1)
 		{
-			/*DWORD find_addr = ReadVirtualMemory<DWORD>((DWORD)PID,0x005A1040, 4);
-			printf("[+] Address: %p\n",find_addr);			*/
-
-			ModuleBase(0x3770,"ucrtbase.dll");
-
+			
+			
+			ReadVirtualMemory(0x24AC, 0x04930000 + 0xE956A0, &WorldToScreenMatrix, sizeof(WorldToScreenMatrix_t));
+			printf("FloatZ: %f\n", WorldToScreenMatrix.flMatrix[3]);
+			//system("cls");
 		}
 
 		Sleep(1);

@@ -2,7 +2,6 @@
 #include <Windows.h>
 #include <stdio.h>
 #include <string>
-
 #include "loader.h"
 #include "tools.h"
 #include "funcs.h"
@@ -40,12 +39,14 @@ int main()
     }
 
     printf("[+] Driver probably loaded\n");
-    system("pause");
+   // system("pause");
 
     //
     //Call some features and when they terminate will go next
-    init_control();
-    
+   init_control();
+    while (!GetAsyncKeyState(VK_END) & 1)
+        Sleep(100);
+
   	//
 	//Unload Driver
     if (!unload_driver())
@@ -56,7 +57,8 @@ int main()
     close_scm();
 
     printf("[+] Driver probably unloaded ");
-	
+    Sleep(5000);
+    exit(0);
 
 	getchar();
 }
