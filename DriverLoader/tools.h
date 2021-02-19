@@ -4,28 +4,14 @@ HANDLE hDriver;
 
 #define IO_READ_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0701, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
-#define IO_WRITE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0702, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+#define IO_WRITE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0702, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
 #define IO_GETMODULEBASE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0703, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
 
+#define IO_GET_STATUS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0703, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
 //Init Structs//
-typedef struct _KERNEL_READ_REQUEST
-{
-	ULONG ProcessId;
-	DWORD_PTR  Address;
-	PVOID Response;
-	SIZE_T  Size;
-} KERNEL_READ_REQUEST, * PKERNEL_READ_REQUEST;
 
-typedef struct _KERNEL_WRITE_REQUEST
-{
-	ULONG ProcessId;
-	DWORD_PTR Address;
-	ULONG Value;
-	ULONG Size;
-
-} KERNEL_WRITE_REQUEST, * PKERNEL_WRITE_REQUEST;
 
 typedef struct _KERNEL_GETMODULEBASE_REQUEST
 {
@@ -63,22 +49,31 @@ bool ModuleBaseInfo(ULONG ProcessId, const std::string& module_name, PDWORD_PTR 
 
 }
 
-bool WriteVirtualMemory(ULONG ProcessId, DWORD_PTR WriteAddress, ULONG WriteValue, SIZE_T WriteSize)
+void WriteVirtualMemory(ULONG ProcessId, DWORD_PTR WriteAddress, LPVOID WriteValue, SIZE_T WriteSize)
 {
 	if (hDriver == INVALID_HANDLE_VALUE)
-		return false;
-	DWORD Bytes;
+		return;
 
-	KERNEL_WRITE_REQUEST  WriteRequest;
-	WriteRequest.ProcessId = ProcessId;
-	WriteRequest.Address = WriteAddress;
-	WriteRequest.Value = WriteValue;
-	WriteRequest.Size = WriteSize;
+	struct Rpmdata
+	{
+		HANDLE pid;
+		PVOID SourceAddress;
+		PVOID TargetAddress;
+		SIZE_T Size;
+	} rpm;
+	rpm.pid = (HANDLE)ProcessId;
+	rpm.SourceAddress = (PVOID)WriteAddress;
+	rpm.TargetAddress = WriteValue;
+	rpm.Size = WriteSize;
 
-	if (DeviceIoControl(hDriver, IO_WRITE_REQUEST, &WriteRequest, sizeof(WriteRequest), 0, 0, &Bytes, NULL))
-		return true;
+	//HANDLE hDevice = INVALID_HANDLE_VALUE;
+	BOOL bResult = FALSE;
+	DWORD junk = 0;
+
+	if (DeviceIoControl(hDriver, IO_WRITE_REQUEST, &rpm, sizeof(rpm), WriteValue, WriteSize, &junk, (LPOVERLAPPED)NULL))	
+		printf("[+] DeviceIoCointrol 1\n");			
 	else
-		return false;
+		printf("[+] DeviceIoCointrol 0\n");
 }
 
 
@@ -106,6 +101,12 @@ void ReadVirtualMemory(ULONG ProcessId, DWORD_PTR ReadAddress, LPVOID lpBuffer, 
 	// send code to our driver with the arguments
 	bool result = DeviceIoControl(hDriver, IO_READ_REQUEST, &rpm, sizeof(rpm), lpBuffer, Size, &junk, (LPOVERLAPPED)NULL);
 
+}
+
+bool getstatus()
+{
+	bool result = DeviceIoControl(hDriver, IO_GET_STATUS, NULL, NULL, NULL,NULL, NULL, (LPOVERLAPPED)NULL);
+	return result;
 }
 
 //template <class cData>

@@ -44,6 +44,7 @@ int main()
     //
     //Call some features and when they terminate will go next
    init_control();
+
     while (!GetAsyncKeyState(VK_END) & 1)
         Sleep(100);
 

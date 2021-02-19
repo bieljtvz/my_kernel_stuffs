@@ -30,13 +30,17 @@ void init_control()
 	{
 
 		//while(1)
-		//if (GetAsyncKeyState(VK_F9) & 1)
+		if (GetAsyncKeyState(VK_F9) & 1)
 		{
+			BYTE new_data[] = {0x8B,0xFF,0x55,0x8b,0xEC};
+			int valor = 10;
+			WriteVirtualMemory(0x1930, 0x769F0BD0, &new_data, sizeof(new_data));
 			
-			
-			ReadVirtualMemory(0x24AC, 0x04930000 + 0xE956A0, &WorldToScreenMatrix, sizeof(WorldToScreenMatrix_t));
-			printf("FloatZ: %f\n", WorldToScreenMatrix.flMatrix[3]);
-			//system("cls");
+		}
+
+		if (GetAsyncKeyState(VK_F8) & 1)
+		{
+			getstatus();
 		}
 
 		Sleep(1);
