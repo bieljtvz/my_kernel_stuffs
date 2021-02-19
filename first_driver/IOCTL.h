@@ -1,9 +1,9 @@
 #pragma once
 
 #define IO_READ_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0701, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
-#define IO_WRITE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0702, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+#define IO_WRITE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0702, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 #define IO_GETMODULE_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0703, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
-
+#define IO_GET_STATUS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0704, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
 PDEVICE_OBJECT pDeviceObject; // our driver object
 UNICODE_STRING dev, dos; // Driver registry paths
@@ -38,6 +38,7 @@ struct {
 }
 UserLand;
 
+
 // IOCTL Call Handler function
 NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
@@ -52,10 +53,12 @@ NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 	ULONG ControlCode = stack->Parameters.DeviceIoControl.IoControlCode;
 
 	if (ControlCode == IO_READ_REQUEST)
-	{		
-		memcpy(&UserLand, Irp->AssociatedIrp.SystemBuffer, sizeof(UserLand));
+	{	
+		memcpy(&UserLand, Irp->AssociatedIrp.SystemBuffer, sizeof(UserLand));	
+
 		UserBuffer = (PUCHAR)MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
-		if (UserBuffer && UserLand.Addr != NULL) {
+		if (UserBuffer && UserLand.Addr != NULL) 
+		{
 			tools::KeReadVirtualMemory((HANDLE)UserLand.PID, UserLand.Addr, (PVOID)UserBuffer, UserLand.Bytes);
 		}
 		KeFlushIoBuffers(Irp->MdlAddress, TRUE, FALSE);
@@ -64,15 +67,20 @@ NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 		
 	}
 	else if (ControlCode == IO_WRITE_REQUEST)
-	{
-		
-		PKERNEL_WRITE_REQUEST WriteInput = (PKERNEL_WRITE_REQUEST)Irp->AssociatedIrp.SystemBuffer;
-
-		tools::KeWriteVirtualMemory((HANDLE)WriteInput->ProcessId, &WriteInput->Value, (PVOID)WriteInput->Address, WriteInput->Size);
-
-		Status = STATUS_SUCCESS;
-		BytesIO = sizeof(KERNEL_WRITE_REQUEST);
-	}	
+	{		
+		memcpy(&UserLand, Irp->AssociatedIrp.SystemBuffer, sizeof(UserLand));
+		UserBuffer = (PUCHAR)MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
+		if (UserBuffer && UserLand.Addr != NULL)
+		{		
+			tools::KeWriteVirtualMemory((HANDLE)UserLand.PID, UserLand.Addr, (PVOID)UserBuffer, UserLand.Bytes);
+			//tools::writeToReadOnly(UserLand.Addr, (PVOID)UserBuffer, UserLand.Bytes);
+			//tools::VirtualAllocKM((HANDLE)0x1880, MEM_COMMIT| MEM_RESERVE, PAGE_EXECUTE_READWRITE, 0x8);
+			//tools::VirtualProtectKM((HANDLE)0x1930, (PVOID)0x76070BD0, 8, PAGE_EXECUTE_READWRITE);
+		}		
+		KeFlushIoBuffers(Irp->MdlAddress, TRUE, FALSE);
+		Status = 0;
+		BytesIO = 0;
+	}
 	else if (ControlCode == IO_GETMODULE_REQUEST)
 	{
 		PKERNEL_GETMODULEBASE_REQUEST GetModuleBaseInput = (PKERNEL_GETMODULEBASE_REQUEST)Irp->AssociatedIrp.SystemBuffer;			
@@ -108,6 +116,8 @@ NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 		
 		BytesIO = sizeof(KERNEL_GETMODULEBASE_REQUEST);
 	}	
+
+
 	else
 	{		
 		Status = STATUS_INVALID_PARAMETER;

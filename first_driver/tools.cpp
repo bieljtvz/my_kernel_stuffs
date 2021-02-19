@@ -1,10 +1,12 @@
-#include "tools.h"
+﻿#include "tools.h"
 
 //
 //Defs
 typedef NTSTATUS(*QUERY_INFO_PROCESS) (__in HANDLE ProcessHandle, __in PROCESSINFOCLASS ProcessInformationClass, __out_bcount(ProcessInformationLength) PVOID ProcessInformation, __in ULONG ProcessInformationLength, __out_opt PULONG ReturnLength);
 QUERY_INFO_PROCESS ZwQueryInformationProcess;
 
+typedef NTSTATUS (*pfnZwProtectVirtualMemory)(IN HANDLE ProcessHandle,IN OUT PVOID* BaseAddress,IN OUT SIZE_T* NumberOfBytesToProtect,IN ULONG NewAccessProtection,	OUT PULONG OldAccessProtection);
+pfnZwProtectVirtualMemory ZwProtectVirtualMemory;
 //
 //Codes
 
@@ -17,7 +19,7 @@ NTSTATUS tools::KeReadVirtualMemory(HANDLE PID, PVOID SourceAddress, PVOID Targe
 
     TargetProcess = PsGetCurrentProcess();
     __try 
-    {		
+    {			
         MmCopyVirtualMemory(SourceProcess, SourceAddress, TargetProcess, TargetAddress, Size, KernelMode, &Result);	
         return STATUS_SUCCESS;
     }
@@ -28,18 +30,116 @@ NTSTATUS tools::KeReadVirtualMemory(HANDLE PID, PVOID SourceAddress, PVOID Targe
 
 NTSTATUS tools::KeWriteVirtualMemory(HANDLE PID, PVOID SourceAddress, PVOID TargetAddress, SIZE_T Size)
 {
-    SIZE_T Result;
-    PEPROCESS SourceProcess, TargetProcess;
-    PsLookupProcessByProcessId(PID, &SourceProcess);
-    TargetProcess = PsGetCurrentProcess();
-    __try 
-    {   
-        MmCopyVirtualMemory(TargetProcess, SourceAddress, SourceProcess, TargetAddress, Size, KernelMode, &Result);
-        return STATUS_SUCCESS;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return STATUS_ACCESS_DENIED;
-    }
+	SIZE_T Result;
+	PEPROCESS SourceProcess, TargetProcess;
+	PsLookupProcessByProcessId(PID, &SourceProcess);
+	TargetProcess = PsGetCurrentProcess();
+	__try 
+	{
+		MmCopyVirtualMemory(TargetProcess, TargetAddress, SourceProcess, SourceAddress, Size, KernelMode, &Result);			
+		return STATUS_SUCCESS;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return STATUS_ACCESS_DENIED;
+	}
+}
+
+
+
+NTSTATUS tools::VirtualProtectKM(HANDLE PID, PVOID Address, SIZE_T Size, ULONG NewProtection)
+{
+
+	if (NULL == ZwProtectVirtualMemory) {
+
+		UNICODE_STRING routineName;
+
+		RtlInitUnicodeString(&routineName, L"ZwProtectVirtualMemory");
+
+		ZwProtectVirtualMemory = (pfnZwProtectVirtualMemory)MmGetSystemRoutineAddress(&routineName);
+
+		if (NULL == ZwProtectVirtualMemory)
+		{
+			log("Cannot resolve ZwProtectVirtualMemory\n");
+			return STATUS_UNSUCCESSFUL;
+		}
+	}
+
+	NTSTATUS Status = STATUS_SUCCESS;
+	KAPC_STATE apc;
+	ULONG OldPro = 0;
+	
+
+	PEPROCESS pProcess;
+	PsLookupProcessByProcessId(PID, &pProcess);
+
+	// Protect Address
+	KeStackAttachProcess(pProcess, &apc);
+	Status = ZwProtectVirtualMemory(ZwCurrentProcess(), &Address, &Size, NewProtection, &OldPro);
+	KeUnstackDetachProcess(&apc);
+
+	ObDereferenceObject(pProcess);
+
+	log("Status = &X\n", Status);
+
+	return Status;
+}
+
+PVOID tools::VirtualAllocKM(HANDLE PID, ULONG AllocType, ULONG Protection, SIZE_T Size)
+{
+	NTSTATUS Status = STATUS_SUCCESS;
+	KAPC_STATE apc;
+	
+	PVOID Addy = 0;
+
+	PEPROCESS pProcess;
+	PsLookupProcessByProcessId(PID, &pProcess);
+
+	KeStackAttachProcess(pProcess, &apc);
+	Status = ZwAllocateVirtualMemory(ZwCurrentProcess(), &Addy, 0, &Size, AllocType, Protection);
+	KeUnstackDetachProcess(&apc);	
+
+	if (!NT_SUCCESS(Status))
+	{
+		log("ZwAllocateVirtualMemory Failed:%p\n", Status);
+		ObDereferenceObject(pProcess);
+		return 0;
+	}
+	log("Addr: %p",Addy);
+	ObDereferenceObject(pProcess);
+
+	return Addy;
+}
+
+NTSTATUS tools::writeToReadOnly(PVOID address, PVOID buffer, SIZE_T size, BOOLEAN reset )
+{
+	auto mdl = IoAllocateMdl(address, (ULONG)size, FALSE, FALSE, NULL);
+	if (!mdl)
+	{
+#ifdef _DEBUG
+		log(skCrypt("IoAllocateMdl failed"));
+#endif
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	MmProbeAndLockPages(mdl, KernelMode, IoReadAccess);
+	MmProtectMdlSystemAddress(mdl, PAGE_EXECUTE_READWRITE);
+
+	auto mmMap = MmMapLockedPagesSpecifyCache(mdl, KernelMode, MmNonCached, NULL, FALSE, NormalPagePriority);
+	RtlCopyMemory(mmMap, buffer, size);
+
+	if (reset)
+	{
+#ifdef _DEBUG
+		//log(skCrypt("Restoring page to READONLY"));
+#endif
+		MmProtectMdlSystemAddress(mdl, PAGE_READONLY);
+	}
+
+	MmUnmapLockedPages(mmMap, mdl);
+	MmUnlockPages(mdl);
+	IoFreeMdl(mdl);
+
+	return STATUS_SUCCESS;
 }
 
 NTSTATUS tools::GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName)
@@ -334,6 +434,65 @@ PVOID tools::UtlGetModuleBase(_In_ PEPROCESS Process,	_In_ PUNICODE_STRING Modul
 		log("UtlGetModuleBase erro: ");
 		return NULL;
 	}
+}
+
+NTSTATUS DumpKernelMemory(PVOID DstAddr, PVOID SrcAddr, ULONG Size)
+{
+	PMDL  pSrcMdl, pDstMdl;
+	PUCHAR pAddress, pDstAddress;
+	NTSTATUS st = STATUS_UNSUCCESSFUL;
+	ULONG r;
+
+	// Создаем MDL для буфера-источника
+	pSrcMdl = IoAllocateMdl(SrcAddr, Size, FALSE, FALSE, NULL);
+
+	if (pSrcMdl)
+	{
+		// Построение MDL
+		MmBuildMdlForNonPagedPool(pSrcMdl);
+		// Получение адреса из MDL
+		pAddress = (PUCHAR)MmGetSystemAddressForMdlSafe(pSrcMdl, NormalPagePriority);
+		//zDbgPrint("pAddress = %x", pAddress);
+		if (pAddress != NULL)
+		{
+			pDstMdl = IoAllocateMdl(DstAddr, Size, FALSE, FALSE, NULL);
+			//zDbgPrint("pDstMdl = %x", pDstMdl);
+			if (pDstMdl != NULL)
+			{
+				__try
+				{
+					MmProbeAndLockPages(pDstMdl, KernelMode, IoWriteAccess);
+					pDstAddress = (PUCHAR)MmGetSystemAddressForMdlSafe(pDstMdl, NormalPagePriority);
+					//zDbgPrint("pDstAddress = %x", pDstAddress);
+					if (pDstAddress != NULL)
+					{
+						memset(pDstAddress, 0, Size);
+						//zDbgPrint("Copy block");
+						for (r = 1; r < Size; r++)
+						{
+							if (MmIsAddressValid(pAddress))
+								*pDstAddress = *pAddress;
+							else
+								*pDstAddress = 0;
+							pAddress++;
+							pDstAddress++;
+						}
+
+						st = STATUS_SUCCESS;
+					}
+
+					MmUnlockPages(pDstMdl);
+				}
+				__except (EXCEPTION_EXECUTE_HANDLER)
+				{
+					//zDbgPrint("Copy block exception");
+				}
+				IoFreeMdl(pDstMdl);
+				
+			}
+		}
+	}
+	return STATUS_SUCCESS;
 }
 
 //PVOID tools::UtlGetLdrLoadDll(_In_ PEPROCESS Process/*, _In_ BOOLEAN IsWow64*/)
