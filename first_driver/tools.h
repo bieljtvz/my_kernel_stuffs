@@ -21,7 +21,7 @@ namespace tools
 	NTSTATUS KeReadVirtualMemory(HANDLE PID, PVOID SourceAddress, PVOID TargetAddress, SIZE_T Size);
 	NTSTATUS KeWriteVirtualMemory(HANDLE PID, PVOID SourceAddress, PVOID TargetAddress, SIZE_T Size);
 	NTSTATUS GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName);
-	NTSTATUS writeToReadOnly(PVOID address, PVOID buffer, SIZE_T size, BOOLEAN reset = false);
+	NTSTATUS writeToReadOnly(HANDLE PID, PVOID address, PVOID buffer, SIZE_T size, BOOLEAN reset);
 	PVOID UtlpGetModuleBaseWow64(_In_ PEPROCESS Process, _In_ PUNICODE_STRING ModuleName, PDWORD Size);
 	PVOID UtlpGetModuleBaseNative(_In_ PEPROCESS Process, _In_ PUNICODE_STRING ModuleName,  PDWORD Size);
 	NTSTATUS FindProcess(_In_ HANDLE ProcessId, _Out_ PEPROCESS* Process, _Out_ PBOOLEAN IsWow64);
@@ -30,7 +30,9 @@ namespace tools
 	DWORD get_module_handle_x32(HANDLE pid, LPCWSTR module_name);
 	PVOID UtlGetModuleBase(_In_ PEPROCESS Process, _In_ PUNICODE_STRING ModuleName, _In_ BOOLEAN IsWow64,  PDWORD Size);
 	PVOID VirtualAllocKM(HANDLE PID, ULONG AllocType, ULONG Protection, SIZE_T Size);
-	NTSTATUS VirtualProtectKM(HANDLE PID, PVOID Address, SIZE_T Size, ULONG NewProtection);
+	NTSTATUS VirtualProtectKM(HANDLE PID, PVOID Address, SIZE_T Size, ULONG NewProtection, PULONG OldProtect);
+	NTSTATUS CreateThreadKM(HANDLE PID, PVOID StartAddress, PVOID StartParamte);
+	NTSTATUS FreeVirtualMemory(HANDLE PID, PVOID Address, SIZE_T Size, ULONG FreeType);
 
 };
 

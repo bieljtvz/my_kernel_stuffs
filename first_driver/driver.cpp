@@ -27,7 +27,6 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Regis
 	pDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
 	log("Driver iniciado com sucesso");
-
 	
 
 	return STATUS_SUCCESS;
@@ -42,4 +41,4 @@ void DriverUnload(PDRIVER_OBJECT DriverObject)
 
 	log("Driver descarregado");
 	
-}
+} 

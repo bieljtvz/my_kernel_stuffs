@@ -1,25 +1,6 @@
 #pragma once
 #include <ntddk.h>
 // datatype for read request
-typedef struct _KERNEL_READ_REQUEST
-{
-	ULONG ProcessId;
-	DWORD_PTR  Address;
-	BYTE* Response;
-	SIZE_T  Size;
-
-} KERNEL_READ_REQUEST, * PKERNEL_READ_REQUEST;
-
-
-
-typedef struct _KERNEL_WRITE_REQUEST
-{
-	ULONG ProcessId;
-	DWORD_PTR Address;
-	ULONG Value;
-	ULONG Size;
-
-} KERNEL_WRITE_REQUEST, * PKERNEL_WRITE_REQUEST;
 
 typedef struct _KERNEL_GETMODULEBASE_REQUEST
 {
@@ -29,6 +10,38 @@ typedef struct _KERNEL_GETMODULEBASE_REQUEST
 	DWORD Size;
 } KERNEL_GETMODULEBASE_REQUEST, * PKERNEL_GETMODULEBASE_REQUEST;
 
+typedef struct _KERNEL_CREATETHREAD_REQUEST
+{
+	ULONG ProcessId;
+	PVOID StartAddress;
+	PVOID StartParam;
+} KERNEL_CREATETHREAD_REQUEST, * PKERNEL_CREATETHREAD_REQUEST;
+
+typedef struct _KERNEL_FREEMEMORY_REQUEST
+{
+	ULONG ProcessId;
+	PVOID Address;
+	SIZE_T Size;
+	ULONG Type;
+} KERNEL_FREEMEMORY_REQUEST, * PKERNEL_FREEMEMORY_REQUEST;
+
+typedef struct _KERNEL_ALLOC_REQUEST
+{
+	ULONG ProcessId;
+	SIZE_T Size;
+	ULONG AllocationType;
+	ULONG Protection;
+	PVOID Response;
+} KERNEL_ALLOC_REQUEST, * PKERNEL_ALLOC_REQUEST;
+
+typedef struct _KERNEL_PROTECT_REQUEST
+{
+	ULONG ProcessId;
+	DWORD_PTR Address;
+	DWORD Size;
+	ULONG NewProtect;
+	ULONG OldProtect;
+} KERNEL_PROTECT_REQUEST, * PKERNEL_PROTECT_REQUEST;
 
 #define IMAGE_DOS_SIGNATURE                     0x5A4D      // MZ
 #define IMAGE_NT_SIGNATURE                      0x00004550  // PE00
@@ -51,6 +64,14 @@ typedef struct _KERNEL_GETMODULEBASE_REQUEST
 #define IMAGE_DIRECTORY_ENTRY_IAT               12   // Import Address Table
 #define IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT      13   // Delay Load Import Descriptors
 #define IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR    14   // COM Runtime descriptor
+
+typedef struct _INITIAL_TEB {
+	PVOID                StackBase;
+	PVOID                StackLimit;
+	PVOID                StackCommit;
+	PVOID                StackCommitMax;
+	PVOID                StackReserved;
+} INITIAL_TEB, * PINITIAL_TEB;
 
 typedef struct _SYSTEM_THREAD_INFORMATION
 {

@@ -7,9 +7,14 @@ QUERY_INFO_PROCESS ZwQueryInformationProcess;
 
 typedef NTSTATUS (*pfnZwProtectVirtualMemory)(IN HANDLE ProcessHandle,IN OUT PVOID* BaseAddress,IN OUT SIZE_T* NumberOfBytesToProtect,IN ULONG NewAccessProtection,	OUT PULONG OldAccessProtection);
 pfnZwProtectVirtualMemory ZwProtectVirtualMemory;
+
+typedef NTSTATUS (*pfnZwCreateThread)(OUT PHANDLE ThreadHandle,	IN ACCESS_MASK DesiredAccess, IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL, IN HANDLE ProcessHandle, OUT PCLIENT_ID ClientId, IN PCONTEXT ThreadContext,IN PINITIAL_TEB InitialTeb,IN BOOLEAN CreateSuspended);
+pfnZwCreateThread ZwCreateThread;
+
+typedef NTSTATUS (*pfnRtlCreateUserThread)(IN HANDLE ProcessHandle,	IN PSECURITY_DESCRIPTOR SecurityDescriptor OPTIONAL, IN BOOLEAN CreateSuspended,IN ULONG StackZeroBits,	IN OUT PULONG StackReserved, IN OUT PULONG StackCommit,IN PVOID StartAddress,IN PVOID StartParameter OPTIONAL,OUT PHANDLE ThreadHandle,	OUT PCLIENT_ID ClientID);
+pfnRtlCreateUserThread RtlCreateUserThread;
 //
 //Codes
-
 
 NTSTATUS tools::KeReadVirtualMemory(HANDLE PID, PVOID SourceAddress, PVOID TargetAddress, SIZE_T Size)
 {
@@ -44,12 +49,11 @@ NTSTATUS tools::KeWriteVirtualMemory(HANDLE PID, PVOID SourceAddress, PVOID Targ
 	}
 }
 
-
-
-NTSTATUS tools::VirtualProtectKM(HANDLE PID, PVOID Address, SIZE_T Size, ULONG NewProtection)
+NTSTATUS tools::VirtualProtectKM(HANDLE PID, PVOID Address, SIZE_T Size, ULONG NewProtection, PULONG OldProtect)
 {
 
-	if (NULL == ZwProtectVirtualMemory) {
+	if (NULL == ZwProtectVirtualMemory)
+	{
 
 		UNICODE_STRING routineName;
 
@@ -66,7 +70,7 @@ NTSTATUS tools::VirtualProtectKM(HANDLE PID, PVOID Address, SIZE_T Size, ULONG N
 
 	NTSTATUS Status = STATUS_SUCCESS;
 	KAPC_STATE apc;
-	ULONG OldPro = 0;
+	ULONG OldProtection = 0;
 	
 
 	PEPROCESS pProcess;
@@ -74,12 +78,12 @@ NTSTATUS tools::VirtualProtectKM(HANDLE PID, PVOID Address, SIZE_T Size, ULONG N
 
 	// Protect Address
 	KeStackAttachProcess(pProcess, &apc);
-	Status = ZwProtectVirtualMemory(ZwCurrentProcess(), &Address, &Size, NewProtection, &OldPro);
+	Status = ZwProtectVirtualMemory(ZwCurrentProcess(), &Address, &Size, NewProtection, OldProtect);
 	KeUnstackDetachProcess(&apc);
 
 	ObDereferenceObject(pProcess);
 
-	log("Status = &X\n", Status);
+	
 
 	return Status;
 }
@@ -96,22 +100,69 @@ PVOID tools::VirtualAllocKM(HANDLE PID, ULONG AllocType, ULONG Protection, SIZE_
 
 	KeStackAttachProcess(pProcess, &apc);
 	Status = ZwAllocateVirtualMemory(ZwCurrentProcess(), &Addy, 0, &Size, AllocType, Protection);
+	
 	KeUnstackDetachProcess(&apc);	
 
 	if (!NT_SUCCESS(Status))
 	{
 		log("ZwAllocateVirtualMemory Failed:%p\n", Status);
-		ObDereferenceObject(pProcess);
+		ObDereferenceObject(pProcess);		
 		return 0;
 	}
-	log("Addr: %p",Addy);
 	ObDereferenceObject(pProcess);
 
 	return Addy;
 }
 
-NTSTATUS tools::writeToReadOnly(PVOID address, PVOID buffer, SIZE_T size, BOOLEAN reset )
+NTSTATUS tools::CreateThreadKM(HANDLE PID, PVOID StartAddress, PVOID StartParamte)
 {
+	if (NULL == RtlCreateUserThread)
+	{
+		UNICODE_STRING routineName;
+		RtlInitUnicodeString(&routineName, L"RtlCreateUserThread");
+
+		RtlCreateUserThread = (pfnRtlCreateUserThread)MmGetSystemRoutineAddress(&routineName);
+
+		if (NULL == RtlCreateUserThread)
+		{
+			log("Impossivel buscar RtlCreateUserThread\n");
+			return STATUS_UNSUCCESSFUL;
+		}
+	}
+	
+	log("RtlCreateUserThread: %p", (DWORD_PTR)RtlCreateUserThread);
+
+	KAPC_STATE apc;	
+	PEPROCESS pProcess;
+
+	auto status = PsLookupProcessByProcessId(PID, &pProcess);
+
+	if (status != STATUS_SUCCESS)
+		return STATUS_UNSUCCESSFUL;
+
+	HANDLE SaidaThread;
+	CLIENT_ID cid;
+
+	KeStackAttachProcess(pProcess, &apc);
+
+	status = RtlCreateUserThread(ZwCurrentProcess(),0,0,0,0,0, StartAddress, StartParamte, &SaidaThread, &cid);
+
+	KeUnstackDetachProcess(&apc);
+
+	ObDereferenceObject(pProcess);
+
+	log("RtlCreateUserThread: %p", status);
+
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS tools::writeToReadOnly(HANDLE PID, PVOID address, PVOID buffer, SIZE_T size, BOOLEAN reset )
+{
+	KAPC_STATE apc;
+	PEPROCESS pProcess;
+	PsLookupProcessByProcessId(PID, &pProcess);
+
+	KeStackAttachProcess(pProcess, &apc);
 	auto mdl = IoAllocateMdl(address, (ULONG)size, FALSE, FALSE, NULL);
 	if (!mdl)
 	{
@@ -138,8 +189,31 @@ NTSTATUS tools::writeToReadOnly(PVOID address, PVOID buffer, SIZE_T size, BOOLEA
 	MmUnmapLockedPages(mmMap, mdl);
 	MmUnlockPages(mdl);
 	IoFreeMdl(mdl);
+	KeUnstackDetachProcess(&apc);
+
 
 	return STATUS_SUCCESS;
+}
+
+NTSTATUS tools::FreeVirtualMemory(HANDLE PID, PVOID Address, SIZE_T Size, ULONG FreeType)
+{
+	KAPC_STATE apc;
+	PEPROCESS pProcess;
+
+	auto status = PsLookupProcessByProcessId(PID, &pProcess);
+
+	if (status != STATUS_SUCCESS)
+		return STATUS_UNSUCCESSFUL;
+
+	KeStackAttachProcess(pProcess, &apc);
+
+	status = ZwFreeVirtualMemory(ZwCurrentProcess(), &Address, &Size, FreeType);
+
+	KeUnstackDetachProcess(&apc);
+
+	ObDereferenceObject(pProcess);
+
+	log("status free: %p", status);
 }
 
 NTSTATUS tools::GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName)
@@ -435,6 +509,8 @@ PVOID tools::UtlGetModuleBase(_In_ PEPROCESS Process,	_In_ PUNICODE_STRING Modul
 		return NULL;
 	}
 }
+
+
 
 NTSTATUS DumpKernelMemory(PVOID DstAddr, PVOID SrcAddr, ULONG Size)
 {
